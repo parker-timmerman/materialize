@@ -166,6 +166,7 @@ pub fn bench_persist(c: &mut Criterion) {
     }
     plumbing::bench_encode_batch("plumbing/encode_batch", throughput, c, &data);
     plumbing::bench_trace_push_batch(c);
+    plumbing::bench_state_diff_serde(c);
 }
 
 fn create_mem_mem_client() -> Result<PersistClient, ExternalError> {

@@ -14,10 +14,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use bytes::Bytes;
-use criterion::{Bencher, BenchmarkId, Criterion, Throughput};
+use criterion::{black_box, Bencher, BenchmarkId, Criterion, Throughput};
 use differential_dataflow::trace::Description;
 use futures::stream::{FuturesUnordered, StreamExt};
-use mz_persist_client::internals_bench::trace_push_batch_one_iter;
+use mz_persist_client::internals_bench::{state_diff, trace_push_batch_one_iter};
 use timely::progress::Antichain;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -224,5 +224,18 @@ pub fn bench_trace_push_batch(c: &mut Criterion) {
     };
     g.bench_function(BenchmarkId::new("push_batch", num_batches), |b| {
         b.iter(|| trace_push_batch_one_iter(num_batches));
+    });
+}
+
+pub fn bench_state_diff_serde(c: &mut Criterion) {
+    let mut g = c.benchmark_group("state_diff");
+
+    let state_diff_large = state_diff();
+    let mut buf = Vec::with_capacity(500 * 1024);
+    g.bench_function(BenchmarkId::new("serialize", "large"), |b| {
+        b.iter(|| {
+            black_box(buf.clear());
+            black_box(state_diff_large.encode(&mut buf));
+        })
     });
 }

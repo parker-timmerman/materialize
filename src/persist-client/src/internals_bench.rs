@@ -19,7 +19,10 @@ use timely::progress::Antichain;
 use tracing::info;
 
 use crate::internal::state::HollowBatch;
+use crate::internal::state_diff::StateDiff;
 use crate::internal::trace::Trace;
+
+const PROTO_B64_STATE_DIFF: &str = include_str!("../data/state_diff.bin");
 
 pub fn trace_push_batch_one_iter(num_batches: usize) {
     let mut trace = Trace::<usize>::default();
@@ -49,4 +52,9 @@ pub fn trace_push_batch_one_iter(num_batches: usize) {
         });
     }
     black_box(trace);
+}
+
+pub fn state_diff() -> StateDiff<u64> {
+    let bytes = base64::decode(&PROTO_B64_STATE_DIFF).expect("valid proto");
+    StateDiff::decode(&semver::Version::new(9726190406607058665, 11417006072953813258, 11753729592790684462), &bytes)
 }
