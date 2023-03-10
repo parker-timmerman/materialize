@@ -8,6 +8,8 @@
 // by the Apache License, Version 2.0.
 
 use mz_persist::location::SeqNo;
+use proptest::strategy::Strategy;
+use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::str::FromStr;
@@ -18,7 +20,7 @@ use crate::{ShardId, WriterId};
 
 /// An opaque identifier for an individual batch of a persist durable TVC (aka
 /// shard).
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Arbitrary)]
 pub struct PartId(pub(crate) [u8; 16]);
 
 impl std::fmt::Display for PartId {
@@ -81,8 +83,23 @@ impl Deref for PartialBatchKey {
     }
 }
 
+impl proptest::arbitrary::Arbitrary for PartialBatchKey {
+    type Parameters = ();
+    type Strategy = proptest::strategy::BoxedStrategy<PartialBatchKey>;
+
+    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+        (
+            proptest::arbitrary::any::<WriterId>(),
+            proptest::arbitrary::any::<PartId>(),
+        )
+            .prop_map(|(write, part)| PartialBatchKey::new(&write, &part))
+            .no_shrink()
+            .boxed()
+    }
+}
+
 /// An opaque identifier for an individual blob of a persist durable TVC (aka shard).
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Arbitrary)]
 pub struct RollupId(pub(crate) [u8; 16]);
 
 impl std::fmt::Display for RollupId {
@@ -142,6 +159,18 @@ impl Deref for PartialRollupKey {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl proptest::arbitrary::Arbitrary for PartialRollupKey {
+    type Parameters = ();
+    type Strategy = proptest::strategy::BoxedStrategy<PartialRollupKey>;
+
+    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+        proptest::arbitrary::any::<(SeqNo, RollupId)>()
+            .prop_map(|(seq, rollup)| PartialRollupKey::new(seq, &rollup))
+            .no_shrink()
+            .boxed()
     }
 }
 

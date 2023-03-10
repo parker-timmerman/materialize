@@ -17,6 +17,8 @@ use mz_ore::cast::CastFrom;
 use mz_persist::location::{SeqNo, VersionedData};
 use mz_persist_types::Codec64;
 use mz_proto::TryFromProtoError;
+use proptest::prop_oneof;
+use proptest::strategy::{BoxedStrategy, Strategy};
 use timely::progress::{Antichain, Timestamp};
 use timely::PartialOrder;
 use tracing::debug;
@@ -58,6 +60,27 @@ impl<K: Debug, V: Debug> std::fmt::Debug for StateFieldDiff<K, V> {
             .field("val", &self.val)
             .field("key", &self.key)
             .finish()
+    }
+}
+
+impl<K, V> proptest::arbitrary::Arbitrary for StateFieldDiff<K, V>
+where
+    K: proptest::arbitrary::Arbitrary + 'static,
+    V: proptest::arbitrary::Arbitrary + 'static,
+{
+    type Parameters = ();
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+        let variant = prop_oneof![
+            proptest::arbitrary::any::<V>().prop_map(|new| StateFieldValDiff::Insert(new)),
+            proptest::arbitrary::any::<(V, V)>()
+                .prop_map(|(old, new)| StateFieldValDiff::Update(old, new)),
+            proptest::arbitrary::any::<V>().prop_map(|old| StateFieldValDiff::Delete(old)),
+        ];
+        (proptest::arbitrary::any::<K>(), variant)
+            .prop_map(|(key, val)| StateFieldDiff { key, val })
+            .boxed()
     }
 }
 
@@ -238,6 +261,93 @@ impl<T: Timestamp + Lattice + Codec64> StateDiff<T> {
         }
 
         Ok(())
+    }
+}
+
+impl<T> proptest::arbitrary::Arbitrary for StateDiff<T>
+where
+    T: proptest::arbitrary::Arbitrary + timely::order::PartialOrder + Clone + 'static,
+{
+    type Parameters = ();
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
+
+    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+        use proptest::arbitrary::any;
+
+        let applier_version = mz_ore::proptest::semver::version_strategy();
+        let seqno_from = any::<SeqNo>();
+        let seqno_to = any::<SeqNo>();
+        let walltime_ms = any::<u64>();
+        let latest_rollup_key = any::<PartialRollupKey>();
+        let rollups = any::<Vec<StateFieldDiff<SeqNo, HollowRollup>>>();
+        let hostname = any::<Vec<StateFieldDiff<(), String>>>();
+        let last_gc_req = any::<Vec<StateFieldDiff<(), SeqNo>>>();
+        let leased_readers = any::<Vec<StateFieldDiff<LeasedReaderId, LeasedReaderState<T>>>>();
+        let critical_readers =
+            any::<Vec<StateFieldDiff<CriticalReaderId, CriticalReaderState<T>>>>();
+        let writers = any::<Vec<StateFieldDiff<WriterId, WriterState<T>>>>();
+        let since_items = proptest::prop_oneof![
+            mz_ore::proptest::timely::antichain_strategy()
+                .prop_map(|new| StateFieldValDiff::Insert(new)),
+            (
+                mz_ore::proptest::timely::antichain_strategy(),
+                mz_ore::proptest::timely::antichain_strategy()
+            )
+                .prop_map(|(new, old)| StateFieldValDiff::Update(new, old)),
+            mz_ore::proptest::timely::antichain_strategy()
+                .prop_map(|old| StateFieldValDiff::Delete(old)),
+        ]
+        .prop_map(|val| StateFieldDiff { key: (), val });
+        let since = proptest::collection::vec(since_items, 0..32);
+        let spine = any::<Vec<StateFieldDiff<HollowBatch<T>, ()>>>();
+
+        (
+            (
+                applier_version,
+                seqno_from,
+                seqno_to,
+                walltime_ms,
+                latest_rollup_key,
+                rollups,
+                hostname,
+                last_gc_req,
+                leased_readers,
+                critical_readers,
+            ),
+            (writers, since, spine),
+        )
+            .prop_map(
+                |(
+                    (
+                        applier_version,
+                        seqno_from,
+                        seqno_to,
+                        walltime_ms,
+                        latest_rollup_key,
+                        rollups,
+                        hostname,
+                        last_gc_req,
+                        leased_readers,
+                        critical_readers,
+                    ),
+                    (writers, since, spine),
+                )| StateDiff {
+                    applier_version,
+                    seqno_from,
+                    seqno_to,
+                    walltime_ms,
+                    latest_rollup_key,
+                    rollups,
+                    hostname,
+                    last_gc_req,
+                    leased_readers,
+                    critical_readers,
+                    writers,
+                    since,
+                    spine,
+                },
+            )
+            .boxed()
     }
 }
 
@@ -869,7 +979,8 @@ impl ProtoStateFieldDiffs {
         let encoded_length = msg.encoded_len();
         self.data_lens.push(u64::cast_from(encoded_length));
         self.data_bytes.reserve(encoded_length);
-        msg.encode(&mut self.data_bytes).expect("reserved enough space");
+        msg.encode(&mut self.data_bytes)
+            .expect("reserved enough space");
     }
 
     pub fn push_data(&mut self, mut data: Vec<u8>) {

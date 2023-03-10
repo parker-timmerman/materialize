@@ -23,6 +23,7 @@ use mz_ore::task::RuntimeExt;
 use mz_persist::location::{Blob, SeqNo};
 use mz_persist::retry::Retry;
 use mz_persist_types::{Codec, Codec64};
+use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use timely::progress::{Antichain, Timestamp};
 use timely::PartialOrder;
@@ -41,7 +42,7 @@ use crate::internal::state::{HollowBatch, Since};
 use crate::{parse_id, GarbageCollector, PersistConfig};
 
 /// An opaque identifier for a reader of a persist durable TVC (aka shard).
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Arbitrary)]
 #[serde(try_from = "String", into = "String")]
 pub struct LeasedReaderId(pub(crate) [u8; 16]);
 

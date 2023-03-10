@@ -23,6 +23,8 @@ use mz_ore::cast::CastFrom;
 use mz_ore::now::EpochMillis;
 use mz_persist::location::SeqNo;
 use mz_persist_types::{Codec, Codec64, Opaque};
+use proptest::strategy::Strategy;
+use proptest_derive::Arbitrary;
 use semver::Version;
 use timely::progress::{Antichain, Timestamp};
 use timely::PartialOrder;
@@ -46,7 +48,7 @@ include!(concat!(
 
 /// A token to disambiguate state commands that could not otherwise be
 /// idempotent.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Arbitrary)]
 pub struct IdempotencyToken(pub(crate) [u8; 16]);
 
 impl std::fmt::Display for IdempotencyToken {
@@ -91,7 +93,39 @@ pub struct LeasedReaderState<T> {
     pub debug: HandleDebugState,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl<T> proptest::arbitrary::Arbitrary for LeasedReaderState<T>
+where
+    T: proptest::arbitrary::Arbitrary + timely::order::PartialOrder + 'static,
+{
+    type Parameters = ();
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
+
+    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+        let seq = proptest::arbitrary::any::<SeqNo>();
+        let since = mz_ore::proptest::timely::antichain_strategy();
+        let last_heartbeat_timestamp_ms = proptest::arbitrary::any::<u64>();
+        let lease_duration = proptest::arbitrary::any::<u64>();
+        let debug = proptest::arbitrary::any::<HandleDebugState>();
+
+        (
+            seq,
+            since,
+            last_heartbeat_timestamp_ms,
+            lease_duration,
+            debug,
+        )
+            .prop_map(|(seq, since, last, lease, debug)| LeasedReaderState {
+                seqno: seq,
+                since,
+                last_heartbeat_timestamp_ms: last,
+                lease_duration_ms: lease,
+                debug,
+            })
+            .boxed()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Arbitrary)]
 pub struct OpaqueState(pub [u8; 8]);
 
 #[derive(Clone, Debug, PartialEq)]
@@ -104,6 +138,30 @@ pub struct CriticalReaderState<T> {
     pub opaque_codec: String,
     /// For debugging.
     pub debug: HandleDebugState,
+}
+
+impl<T> proptest::arbitrary::Arbitrary for CriticalReaderState<T>
+where
+    T: proptest::arbitrary::Arbitrary + timely::order::PartialOrder + 'static,
+{
+    type Parameters = ();
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
+
+    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+        let since = mz_ore::proptest::timely::antichain_strategy();
+        let opaque = proptest::arbitrary::any::<OpaqueState>();
+        let opaque_codec = proptest::arbitrary::any::<String>();
+        let debug = proptest::arbitrary::any::<HandleDebugState>();
+
+        (since, opaque, opaque_codec, debug)
+            .prop_map(|(since, opaque, opaque_codec, debug)| CriticalReaderState {
+                since,
+                opaque,
+                opaque_codec,
+                debug,
+            })
+            .boxed()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -123,8 +181,40 @@ pub struct WriterState<T> {
     pub debug: HandleDebugState,
 }
 
+impl<T> proptest::arbitrary::Arbitrary for WriterState<T>
+where
+    T: proptest::arbitrary::Arbitrary + timely::order::PartialOrder + 'static,
+{
+    type Parameters = ();
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
+
+    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+        let last_heartbeat_timestamp_ms = proptest::arbitrary::any::<u64>();
+        let lease_duration_ms = proptest::arbitrary::any::<u64>();
+        let most_recent_write_token = proptest::arbitrary::any::<IdempotencyToken>();
+        let most_recent_write_upper = mz_ore::proptest::timely::antichain_strategy();
+        let debug = proptest::arbitrary::any::<HandleDebugState>();
+
+        (
+            last_heartbeat_timestamp_ms,
+            lease_duration_ms,
+            most_recent_write_token,
+            most_recent_write_upper,
+            debug,
+        )
+            .prop_map(|(last, lease, token, upper, debug)| WriterState {
+                last_heartbeat_timestamp_ms: last,
+                lease_duration_ms: lease,
+                most_recent_write_token: token,
+                most_recent_write_upper: upper,
+                debug,
+            })
+            .boxed()
+    }
+}
+
 /// Debugging info for a reader or writer.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Arbitrary)]
 pub struct HandleDebugState {
     /// Hostname of the persist user that registered this writer or reader. For
     /// critical readers, this is the _most recent_ registration.
@@ -134,7 +224,7 @@ pub struct HandleDebugState {
 }
 
 /// A subset of a [HollowBatch] corresponding 1:1 to a blob.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Arbitrary)]
 pub struct HollowBatchPart {
     /// Pointer usable to retrieve the updates.
     pub key: PartialBatchKey,
@@ -214,6 +304,30 @@ impl<T> HollowBatch<T> {
     }
 }
 
+impl<T> proptest::arbitrary::Arbitrary for HollowBatch<T>
+where
+    T: proptest::arbitrary::Arbitrary + timely::PartialOrder + Clone + 'static,
+{
+    type Parameters = ();
+    type Strategy = proptest::strategy::BoxedStrategy<Self>;
+
+    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+        let desc = mz_ore::proptest::differential::description_strategy();
+        let parts = proptest::arbitrary::any::<Vec<HollowBatchPart>>();
+        let len = proptest::arbitrary::any::<usize>();
+        let runs = proptest::arbitrary::any::<Vec<usize>>();
+
+        (desc, parts, len, runs)
+            .prop_map(|(desc, parts, len, runs)| HollowBatch {
+                desc,
+                parts,
+                len,
+                runs,
+            })
+            .boxed()
+    }
+}
+
 pub(crate) struct HollowBatchRunIter<'a, T> {
     batch: &'a HollowBatch<T>,
     inner: Peekable<slice::Iter<'a, usize>>,
@@ -248,7 +362,7 @@ impl<'a, T> Iterator for HollowBatchRunIter<'a, T> {
 }
 
 /// A pointer to a rollup stored externally.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Arbitrary)]
 pub struct HollowRollup {
     /// Pointer usable to retrieve the rollup.
     pub key: PartialRollupKey,

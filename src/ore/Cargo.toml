@@ -28,6 +28,7 @@ openssl = { version = "0.10.43", features = ["vendored"], optional = true }
 paste = "1.0.11"
 pin-project = "1.0.12"
 prometheus = { version = "0.13.3", default-features = false, optional = true }
+proptest = { git = "https://github.com/MaterializeInc/proptest.git", default-features = false, features = ["std"], optional = true }
 smallvec = { version = "1.10.0", optional = true }
 stacker = { version = "0.1.15", optional = true }
 sentry = { version = "0.29.1", optional = true }
@@ -42,6 +43,10 @@ tokio-openssl = { version = "0.6.3", optional = true }
 # there is no global `tracing` subscriber.
 tracing-subscriber = { version = "0.3.16", default-features = false, features = ["env-filter", "fmt", "json", "tracing-log"], optional = true }
 
+# For the `proptest` feature
+differential-dataflow = { git = "https://github.com/TimelyDataflow/differential-dataflow.git", optional = true}
+semver = { version = "1.0.16", optional = true }
+timely = { git = "https://github.com/TimelyDataflow/timely-dataflow", default-features = false, optional = true }
 
 # For the `tracing` feature
 atty = { version = "0.2.14", optional = true }
@@ -93,6 +98,7 @@ cli = ["clap"]
 stack = ["stacker"]
 test = ["anyhow", "ctor", "tracing-subscriber"]
 metrics = ["prometheus"]
+proptest_ = ["proptest", "differential-dataflow", "semver", "timely"]
 
 [[test]]
 name = "future"

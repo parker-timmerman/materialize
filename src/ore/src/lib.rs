@@ -124,6 +124,9 @@ pub mod panic;
 pub mod path;
 pub mod permutations;
 pub mod process;
+#[cfg_attr(nightly_doc_features, doc(cfg(feature = "proptest_")))]
+#[cfg(feature = "proptest_")]
+pub mod proptest;
 #[cfg_attr(nightly_doc_features, doc(cfg(feature = "process")))]
 pub mod result;
 #[cfg_attr(nightly_doc_features, doc(cfg(feature = "async")))]

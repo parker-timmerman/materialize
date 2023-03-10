@@ -997,6 +997,7 @@ mod tests {
 
     use mz_build_info::DUMMY_BUILD_INFO;
     use mz_persist::location::SeqNo;
+    use proptest::prelude::*;
 
     use crate::internal::paths::PartialRollupKey;
     use crate::internal::state::HandleDebugState;
@@ -1005,6 +1006,17 @@ mod tests {
     use crate::ShardId;
 
     use super::*;
+
+    proptest! {
+        #[test]
+        fn state_diff_roundtrips(diff: StateDiff<u64>) {
+            let mut buf = Vec::new();
+            diff.encode(&mut buf);
+            let decoded: StateDiff<u64> = StateDiff::decode(&diff.applier_version, &buf);
+
+            prop_assert_eq!(diff, decoded);
+        }
+    }
 
     #[test]
     fn applier_version_state() {
@@ -1233,8 +1245,6 @@ mod tests {
                 val: StateFieldValDiff::Insert(r1_rollup.key.clone()),
             }],
             diff_proto.field_diffs.as_mut().unwrap(),
-            |k| k.into_proto().encode_to_vec(),
-            |v| v.into_proto().encode_to_vec(),
         );
 
         let diff = StateDiff::<u64>::from_proto(diff_proto.clone()).unwrap();
