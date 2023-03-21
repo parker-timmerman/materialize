@@ -621,6 +621,15 @@ pub const ENABLE_RBAC_CHECKS: ServerVar<bool> = ServerVar {
     safe: true,
 };
 
+pub const FORCE_INTROSPECTION_CLUSTER: ServerVar<bool> = ServerVar {
+    name: UncasedStr::new("force_introspection_cluster"),
+    value: &true,
+    description: 
+        "Boolean flag indicating whether we should force queries that depend only on system tables, to run on the mz_introspection cluster (Materialize).",
+    internal: true,
+    safe: true,
+};
+
 /// Represents the input to a variable.
 ///
 /// Each variable has different rules for how it handles each style of input.
@@ -718,6 +727,7 @@ pub struct SessionVars {
     real_time_recency: SessionVar<bool>,
     emit_timestamp_notice: SessionVar<bool>,
     emit_trace_id_notice: SessionVar<bool>,
+    force_introspection_cluster: SessionVar<bool>,
     // Inputs to computed variables.
     build_info: &'static BuildInfo,
     user: User,
@@ -752,6 +762,7 @@ impl SessionVars {
             real_time_recency: SessionVar::new(&REAL_TIME_RECENCY),
             emit_timestamp_notice: SessionVar::new(&EMIT_TIMESTAMP_NOTICE),
             emit_trace_id_notice: SessionVar::new(&EMIT_TRACE_ID_NOTICE),
+            force_introspection_cluster: SessionVar::new(&FORCE_INTROSPECTION_CLUSTER),
             build_info,
             user,
         }
@@ -1103,6 +1114,7 @@ impl SessionVars {
             real_time_recency,
             emit_timestamp_notice,
             emit_trace_id_notice,
+            force_introspection_cluster,
             build_info: _,
             user: _,
         } = self;
@@ -1121,6 +1133,7 @@ impl SessionVars {
         real_time_recency.end_transaction(action);
         emit_timestamp_notice.end_transaction(action);
         emit_trace_id_notice.end_transaction(action);
+        force_introspection_cluster.end_transaction(action);
     }
 
     /// Returns the value of the `application_name` configuration parameter.
@@ -1243,6 +1256,11 @@ impl SessionVars {
     /// Returns the value of `emit_trace_id_notice` configuration parameter.
     pub fn emit_trace_id_notice(&self) -> bool {
         *self.emit_trace_id_notice.value()
+    }
+
+    /// Returns the value of `force_introspection_cluster` configuration parameter.
+    pub fn force_introspection_cluster(&self) -> bool {
+        *self.force_introspection_cluster.value()
     }
 
     /// Returns the value of `is_superuser` configuration parameter.
