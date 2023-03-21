@@ -771,7 +771,7 @@ impl SessionVars {
     /// Returns an iterator over the configuration parameters and their current
     /// values for this session.
     pub fn iter(&self) -> impl Iterator<Item = &dyn Var> {
-        let vars: [&dyn Var; 25] = [
+        let vars: [&dyn Var; 26] = [
             &self.application_name,
             &self.client_encoding,
             &self.client_min_messages,
@@ -795,6 +795,7 @@ impl SessionVars {
             &self.real_time_recency,
             &self.emit_timestamp_notice,
             &self.emit_trace_id_notice,
+            &self.force_introspection_cluster,
             self.build_info,
             &self.user,
         ];
@@ -884,6 +885,8 @@ impl SessionVars {
             Ok(&self.emit_timestamp_notice)
         } else if name == EMIT_TRACE_ID_NOTICE.name {
             Ok(&self.emit_trace_id_notice)
+        } else if name == FORCE_INTROSPECTION_CLUSTER.name {
+            Ok(&self.force_introspection_cluster)
         } else if name == IS_SUPERUSER_NAME {
             Ok(&self.user)
         } else {
@@ -1020,6 +1023,8 @@ impl SessionVars {
             self.emit_timestamp_notice.set(input, local)
         } else if name == EMIT_TRACE_ID_NOTICE.name {
             self.emit_trace_id_notice.set(input, local)
+        } else if name == FORCE_INTROSPECTION_CLUSTER.name {
+            self.force_introspection_cluster.set(input, local)
         } else if name == IS_SUPERUSER_NAME {
             Err(VarError::ReadOnlyParameter(self.user.name()))
         } else {
@@ -1068,6 +1073,8 @@ impl SessionVars {
             self.emit_timestamp_notice.reset(local);
         } else if name == EMIT_TRACE_ID_NOTICE.name {
             self.emit_trace_id_notice.reset(local);
+        } else if name == FORCE_INTROSPECTION_CLUSTER.name {
+            self.force_introspection_cluster.reset(local);
         } else if name == CLIENT_ENCODING.name
             || name == DATE_STYLE.name
             || name == FAILPOINTS.name
