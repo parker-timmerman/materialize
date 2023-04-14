@@ -87,6 +87,15 @@ pub enum Output {
     Hashed { num_values: usize, md5: String },
 }
 
+impl Output {
+    pub fn lines(&self) -> Option<&Vec<String>> {
+        match self {
+            Output::Values(lines) => Some(lines),
+            Output::Hashed { .. } => None,
+        }
+    }
+}
+
 impl std::fmt::Display for Output {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {

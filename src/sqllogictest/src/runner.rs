@@ -252,11 +252,31 @@ impl fmt::Display for Outcome<'_> {
                 actual_raw_output,
                 actual_output,
                 location,
-            } => write!(
-                f,
-                "OutputFailure:{}{}expected: {:?}{}actually: {:?}{}actual raw: {:?}",
-                location, INDENT, expected_output, INDENT, actual_output, INDENT, actual_raw_output
-            ),
+            } => {
+                write!(
+                    f,
+                    "OutputFailure:{}{}expected: {:?}{}actually: {:?}{}actual raw: {:?}",
+                    location,
+                    INDENT,
+                    expected_output,
+                    INDENT,
+                    actual_output,
+                    INDENT,
+                    actual_raw_output
+                )?;
+
+                // Print a text based diff of the output.
+                let lines = expected_output
+                    .lines()
+                    .and_then(|e| actual_output.lines().map(|a| (e, a)))
+                    .map(|(expected, actual)| (expected.join("\n"), actual.join("\n")));
+                if let Some((expected, actual)) = lines {
+                    let diff = similar::TextDiff::from_lines(&expected, &actual);
+                    write!(f, "\n\n{}", diff.unified_diff())?;
+                }
+
+                Ok(())
+            }
             Bail { cause, location } => write!(f, "Bail:{} {}", location, cause),
             Success => f.write_str("Success"),
         }
