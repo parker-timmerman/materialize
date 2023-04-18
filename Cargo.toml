@@ -55,6 +55,8 @@ members = [
     "src/sqllogictest",
     "src/stash",
     "src/stash-debug",
+    "src/stash-derive",
+    "src/stash-version",
     "src/storage",
     "src/storage-client",
     "src/testdrive",
